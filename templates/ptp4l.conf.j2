@@ -1,0 +1,17 @@
+
+[global]
+domainNumber {{ ptp_domain }}
+time_stamping software
+network_transport UDPv4
+delay_mechanism E2E
+twoStepFlag 1
+announceReceiptTimeout 3
+syncReceiptTimeout 3
+logAnnounceInterval 1
+logSyncInterval 0
+logMinDelayReqInterval 0
+priority1 128
+priority2 128
+clockClass 248
+clockAccuracy 0xFE
+offsetScaledLogVariance 0xFFFF

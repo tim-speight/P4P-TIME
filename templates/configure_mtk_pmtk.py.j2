@@ -1,0 +1,62 @@
+
+#!/usr/bin/env python3
+"""
+Configure an MTK (MT3339) GPS (e.g., Quectel L80) via PMTK commands:
+ - Set 1 Hz NMEA output
+ - Enable only RMC sentence (time-of-day) to pair with PPS
+This runs once at boot, before gpsd starts.
+"""
+import sys, time, serial
+
+PORT = "{{ gps_serial_device }}"
+BAUD = {{ gps_baud }}
+
+def nmea_cksum(s: str) -> str:
+    x = 0
+    for ch in s:
+        x ^= ord(ch)
+    return f"*{x:02X}
+"
+
+def make_pmtk(cmd: str) -> bytes:
+    body = cmd.strip()
+    if body.startswith('$'):
+        body = body[1:]
+    if '*' in body:
+        if not body.endswith('
+'):
+            return ("$" + body + "
+").encode('ascii')
+        return ("$" + body).encode('ascii')
+    return ("$" + body + nmea_cksum(body)).encode('ascii')
+
+PMTK_SET_NMEA_UPDATE_1HZ = make_pmtk('PMTK220,1000')
+PMTK_SET_NMEA_RMC_ONLY  = make_pmtk('PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0')
+PMTK_QUERY_VER          = make_pmtk('PMTK605')
+
+def main():
+    try:
+        ser = serial.Serial(PORT, BAUD, timeout=1)
+    except Exception as e:
+        print(f"Failed to open {PORT}: {e}")
+        return 1
+    time.sleep(0.5)
+
+    for pkt in (PMTK_QUERY_VER, PMTK_SET_NMEA_UPDATE_1HZ, PMTK_SET_NMEA_RMC_ONLY):
+        ser.write(pkt)
+        ser.flush()
+        t_end = time.time() + 1.5
+        while time.time() < t_end:
+            try:
+                line = ser.readline().decode('ascii', errors='ignore').strip()
+                if line:
+                    pass
+            except Exception:
+                break
+        time.sleep(0.1)
+
+    ser.close()
+    return 0
+
+if __name__ == '__main__':
+    sys.exit(main())

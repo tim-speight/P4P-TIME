@@ -1,0 +1,13 @@
+
+[Unit]
+Description=PTP v2 daemon (ptp4l) - software timestamping
+After=network-online.target chrony.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/ptp4l -i {{ ptp_interface }} -f /etc/linuxptp/ptp4l.conf -m -S
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
