@@ -1,9 +1,0 @@
-
-# Managed by Ansible
-# Ensure UART and PPS overlay
-enable_uart=1
-
-dtoverlay=pps-gpio,gpiopin={{ pps_gpio_pin }}
-{% if disable_bt_for_full_uart %}
-dtoverlay=pi3-disable-bt
-{% endif %}

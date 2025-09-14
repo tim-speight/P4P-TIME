@@ -1,0 +1,4 @@
+- name: restart ptp4l
+  systemd:
+    name: ptp4l
+    state: restarted

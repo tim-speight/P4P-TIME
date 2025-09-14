@@ -1,0 +1,5 @@
+# install.yml
+- hosts: timing_pi
+  become: true
+  roles:
+    - epics-gps-ntp-ptp

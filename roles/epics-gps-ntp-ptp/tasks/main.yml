@@ -1,0 +1,72 @@
+- name: Add ChirpStack APT key
+  apt_key:
+    keyserver: keyserver.ubuntu.com
+    id: 1CE2AFD36DBCCA00
+  become: true
+
+- name: Add ChirpStack APT repository
+  apt_repository:
+    repo: "deb https://artifacts.chirpstack.io/packages/4.x/deb stable main"
+    state: present
+    filename: chirpstack
+  become: true
+
+- name: Update APT cache
+  apt:
+    update_cache: yes
+  become: true
+
+- name: Install required packages
+  apt:
+    name:
+      - gpsd
+      - chrony
+      - pps-tools
+      - linuxptp
+      - python3-pip
+      - chirpstack-gateway-bridge
+    state: present
+    update_cache: yes
+  become: true
+
+- name: Disable LoRaWAN services
+  systemd:
+    name: "{{ item }}"
+    enabled: false
+    state: stopped
+  loop:
+    - chirpstack-gateway-bridge
+  become: true
+
+- name: Enable ptp4l service
+  systemd:
+    name: ptp4l
+    enabled: true
+    state: started
+  become: true
+
+- name: Install gps_pv_server.py to /usr/local/bin
+  copy:
+    src: files/gps_pv_server.py
+    dest: /usr/local/bin/gps_pv_server.py
+    mode: '0755'
+  become: true
+
+- name: Deploy epics-p4p systemd service unit
+  template:
+    src: epics-p4p.service.j2
+    dest: /etc/systemd/system/epics-p4p.service
+    mode: '0644'
+  become: true
+
+- name: Reload systemd to recognize new unit
+  command: systemctl daemon-reload
+  become: true
+
+- name: Enable and start epics-p4p service
+  systemd:
+    name: epics-p4p
+    enabled: true
+    state: started
+  become: true
+
