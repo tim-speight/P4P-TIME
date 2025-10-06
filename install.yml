@@ -1,5 +1,8 @@
-# install.yml
-- hosts: timing_pi
+---
+- name: Prep a Pi for P4P‑TIME
+  hosts: all
   become: true
+  gather_facts: true
+
   roles:
     - epics-gps-ntp-ptp
