@@ -1,0 +1,5 @@
+epics_p4p_workdir: /opt/epics-p4p
+epics_p4p_venv: /opt/epics-p4p/venv
+epics_p4p_exec: /opt/epics-p4p/start.py
+epics_user: epics
+epics_group: epics

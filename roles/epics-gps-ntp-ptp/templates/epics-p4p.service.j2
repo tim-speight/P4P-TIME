@@ -1,0 +1,11 @@
+[Unit]
+Description=EPICS P4P Service
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/epics-p4p/start.py
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+

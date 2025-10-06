@@ -1,0 +1,64 @@
+import json
+import subprocess
+import time
+from p4p.server import Server
+from p4p.nt import NTScalar
+from p4p.server import SharedPV
+
+# Load config
+with open('config.json') as f:
+    config = json.load(f)
+
+prefix = config.get("pv_prefix", "CLF-TIMING")
+minimal_pvs = config.get("minimal_pvs", True)
+
+# Define PVs
+pvs = {}
+
+# GPS:CONTACT PV
+pvs[f"{prefix}:GPS:CONTACT"] = SharedPV(nt=NTScalar("b"), initial=True)
+
+# TIME:ACCURATE PV
+pvs[f"{prefix}:TIME:ACCURATE"] = SharedPV(nt=NTScalar("b"), initial=True)
+
+# TIME:DEVIATION_NS PV
+deviation_pv = SharedPV(nt=NTScalar("d"))
+
+def update_deviation():
+    try:
+        output = subprocess.check_output(["chronyc", "tracking"], text=True)
+        offset_line = next((line for line in output.splitlines() if "Last offset" in line), None)
+        stratum_line = next((line for line in output.splitlines() if "Stratum" in line), None)
+        leap_line = next((line for line in output.splitlines() if "Leap status" in line), None)
+
+        if offset_line and stratum_line and leap_line:
+            offset_sec = float(offset_line.split(":")[1].strip().split()[0])
+            stratum = int(stratum_line.split(":")[1].strip())
+            leap_status = leap_line.split(":")[1].strip()
+
+            if stratum == 1 and leap_status == "Normal":
+                deviation_ns = int(offset_sec * 1e9)
+                deviation_pv.post(deviation_ns)
+            else:
+                deviation_pv.post(None, udf=True)
+        else:
+            deviation_pv.post(None, udf=True)
+    except Exception:
+        deviation_pv.post(None, udf=True)
+
+# Add deviation PV
+pvs[f"{prefix}:TIME:DEVIATION_NS"] = deviation_pv
+
+# Optional STATUS PV
+if not minimal_pvs or config.get("include_status", False):
+    pvs[f"{prefix}:STATUS"] = SharedPV(nt=NTScalar("s"), initial="OK")
+
+# Start server
+server = Server()
+for name, pv in pvs.items():
+    server.set_pv(name, pv)
+
+print("Starting EPICS P4P server...")
+while True:
+    update_deviation()
+    time.sleep(1)
