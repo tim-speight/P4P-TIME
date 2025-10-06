@@ -1,5 +1,103 @@
-# install.yml
-- hosts: timing_pi
+---
+- name: Prep a Pi for time & P4P
+  hosts: all
   become: true
+  gather_facts: true   # needed for ansible_architecture and network facts
+
+  # 1) TIME BASELINE: run your chrony/NTP/PTP role first
   roles:
-    - epics-gps-ntp-ptp
+    - role: epics-gps-ntp-ptp
+      tags: [timebase]
+      vars:
+        # ↓↓↓ Replace these with YOUR role’s variables ↓↓↓
+        chrony_enabled: true
+        ntp_enabled: false
+        ptp_enabled: true
+        ptp_interfaces: ['eth0']
+        ntp_servers:
+          - 0.pool.ntp.org
+          - 1.pool.ntp.org
+        # ↑↑↑ Replace these with YOUR role’s variables ↑↑↑
+
+  # 2) UNIVERSAL P4P INSTALLER: same play, tagged separately
+  tasks:
+    - name: Ensure Python and pip are present
+      package:
+        name:
+          - python3
+          - python3-pip
+        state: present
+      tags: [p4p]
+
+    - name: Ensure /opt/epics-p4p exists
+      file:
+        path: /opt/epics-p4p
+        state: directory
+        mode: '0755'
+      tags: [p4p]
+
+    - name: Write requirements.txt (Pi-universal)
+      copy:
+        dest: /opt/epics-p4p/requirements.txt
+        mode: '0644'
+        content: |
+          # Buster (Pi 2/3, Python 3.7): last release with cp37 wheels on the Pi
+          p4p==4.1.12 ; python_version < "3.9"
+
+          # Bookworm (Pi 4, Python 3.11 64-bit): latest stable
+          p4p==4.2.1  ; python_version >= "3.11"
+
+          # psutil: conservative on Buster; modern on Bookworm
+          psutil<6.0  ; python_version < "3.9"
+          psutil>=6.0 ; python_version >= "3.11"
+      tags: [p4p]
+
+    - name: Write constraints.txt
+      copy:
+        dest: /opt/epics-p4p/constraints.txt
+        mode: '0644'
+        content: |
+          # NumPy per Python series (avoid accidental source builds)
+          numpy==1.21.*        ; python_version < "3.9"     # Buster / Py 3.7
+          numpy>=1.26,<3.0     ; python_version >= "3.11"   # Bookworm / Py 3.11
+
+          # Build-time safeguards for Buster if a fallback sdist ever occurs
+          Cython<3.0           ; python_version < "3.9"
+          setuptools<60        ; python_version < "3.9"
+
+          # Let P4P resolve epicscorelibs/pvxslibs itself to avoid conflicts
+          # (wheels are available via PyPI; do not over-pin here)
+      tags: [p4p]
+
+    - name: Upgrade pip
+      command: python3 -m pip install -U pip
+      register: pip_upgrade
+      changed_when: >-
+        ('Successfully installed' in (pip_upgrade.stdout | default(''))) or
+        ('Successfully installed' in (pip_upgrade.stderr | default('')))
+      tags: [p4p]
+
+    # 32-bit Raspberry Pi OS: piwheels is the default; no index override.
+    - name: "Install Python deps (32-bit armhf: piwheels default)"
+      command: >-
+        python3 -m pip install
+        -r /opt/epics-p4p/requirements.txt
+        -c /opt/epics-p4p/constraints.txt
+        --prefer-binary
+      when: ansible_architecture != 'aarch64'
+      args:
+        chdir: /opt/epics-p4p
+      tags: [p4p]
+
+    # 64-bit Raspberry Pi OS (aarch64): force PyPI (piwheels does not serve aarch64).
+    - name: "Install Python deps (aarch64: force PyPI)"
+      command: >-
+        python3 -m pip install
+        -r /opt/epics-p4p/requirements.txt
+        -c /opt/epics-p4p/constraints.txt
+        --prefer-binary
+        --index-url https://pypi.org/simple
+      when: ansible_architecture == 'aarch64'
+      args:
+        chdir: /opt/epics-p4p
+      tags: [p4p]
