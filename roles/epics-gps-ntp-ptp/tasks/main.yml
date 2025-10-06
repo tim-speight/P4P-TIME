@@ -1,3 +1,58 @@
+- name: Ensure /opt/epics-p4p directories
+  ansible.builtin.file:
+    path: /opt/epics-p4p/scripts
+    state: directory
+    mode: '0755'
+
+- name: Write requirements.txt (Pi-universal)
+  ansible.builtin.copy:
+    dest: /opt/epics-p4p/requirements.txt
+    mode: '0644'
+    content: |
+      # P4P across Pi generations
+
+      # Buster (Py 3.7): last release with cp37 wheels on the Pi
+      p4p==4.1.12 ; python_version < "3.9"
+
+      # Bookworm (Py 3.11): latest stable
+      p4p==4.2.1  ; python_version >= "3.11"
+
+      # psutil: safe on Buster; modern on Bookworm
+      psutil<6.0  ; python_version < "3.9"
+      psutil>=6.0 ; python_version >= "3.11"
+
+- name: Write constraints.txt
+  ansible.builtin.copy:
+    dest: /opt/epics-p4p/constraints.txt
+    mode: '0644'
+    content: |
+      # NumPy per Python series
+      numpy==1.21.*        ; python_version < "3.9"     # Buster / Py 3.7
+      numpy>=1.26,<3.0     ; python_version >= "3.11"   # Bookworm / Py 3.11
+
+      # Build-time safety for Buster if a fallback sdist ever happens
+      Cython<3.0           ; python_version < "3.9"
+      setuptools<60        ; python_version < "3.9"
+
+      # Let p4p pick epicscorelibs/pvxslibs — don't over-pin to avoid conflicts
+
+- name: Ensure pip is present and up-to-date
+  ansible.builtin.command: python3 -m pip install -U pip
+  changed_when: "'Successfully installed' in result.stdout | default('')"
+  register: result
+
+- name: Install Python dependencies (use PyPI on aarch64, piwheels otherwise)
+  ansible.builtin.command: >
+    python3 -m pip install
+    -r /opt/epics-p4p/requirements.txt
+    -c /opt/epics-p4p/constraints.txt
+    --prefer-binary
+    {% if ansible_architecture == 'aarch64' -%}
+    --index-url https://pypi.org/simple
+    {%- endif %}
+  args:
+    chdir: /opt/epics-p4p
+
 - name: Install EPICS P4P systemd service
   template:
     src: epics-p4p.service.j2
